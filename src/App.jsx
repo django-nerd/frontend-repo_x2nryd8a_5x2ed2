@@ -1,71 +1,145 @@
-function App() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+import { useEffect, useMemo, useState } from 'react'
+import Navbar from './components/Navbar'
+import CategorySidebar from './components/CategorySidebar'
+import ProductGrid from './components/ProductGrid'
+import CartDrawer from './components/CartDrawer'
+import AuthModal from './components/AuthModal'
 
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
+function App() {
+  const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+
+  const [user, setUser] = useState(null)
+  const [categories, setCategories] = useState({})
+  const [selectedCat, setSelectedCat] = useState(null)
+  const [products, setProducts] = useState([])
+  const [cartOpen, setCartOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [cart, setCart] = useState([])
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    fetchCategories()
+    fetchProducts()
+  }, [])
+
+  useEffect(() => {
+    fetchProducts()
+  }, [selectedCat, search])
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${baseUrl}/categories`)
+      const data = await res.json()
+      setCategories(data)
+    } catch (e) { console.error(e) }
+  }
+
+  const fetchProducts = async () => {
+    const qs = new URLSearchParams()
+    if (selectedCat?.subcategory) qs.set('subcategory_id', selectedCat._id)
+    else if (selectedCat?._id) qs.set('category_id', selectedCat._id)
+    if (search) qs.set('q', search)
+    try {
+      const res = await fetch(`${baseUrl}/products?${qs.toString()}`)
+      const data = await res.json()
+      setProducts(data)
+    } catch (e) { console.error(e) }
+  }
+
+  const handleSelectCategory = (cat) => {
+    // if cat has parent, mark as subcategory
+    const isSub = !!cat.parent_id
+    setSelectedCat(isSub ? { ...cat, subcategory: true } : cat)
+  }
+
+  const handleAddToCart = (p) => {
+    setCart(prev => {
+      const exists = prev.find(i => i.product_id === p._id)
+      if (exists) {
+        return prev.map(i => i.product_id === p._id ? { ...i, quantity: i.quantity + 1 } : i)
+      }
+      return [...prev, { product_id: p._id, name: p.name, quantity: 1, unit_price: p.price }]
+    })
+    setCartOpen(true)
+  }
+
+  const handleQtyChange = (id, qty) => {
+    setCart(prev => prev.map(i => i.product_id === id ? { ...i, quantity: qty } : i))
+  }
+
+  const handleRemove = (id) => {
+    setCart(prev => prev.filter(i => i.product_id !== id))
+  }
+
+  const handleCheckout = async () => {
+    if (!user) { setAuthOpen(true); return }
+    try {
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.user_id || user.id,
+          email: user.email,
+          items: cart,
+          notes: '',
+        })
+      })
+      if (!res.ok) throw new Error('Order failed')
+      const data = await res.json()
+      setCart([])
+      setCartOpen(false)
+      alert(`Order placed! ID: ${data.order_id}`)
+    } catch (e) {
+      alert('Failed to place order. Please try again.')
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="absolute inset-0 bg-[radial-gradient(600px_200px_at_top,rgba(37,99,235,0.15),transparent)]" />
+
+      <Navbar
+        user={user}
+        onLoginClick={() => setAuthOpen(true)}
+        onLogoutClick={() => setUser(null)}
+        onCartToggle={() => setCartOpen(true)}
+      />
+
+      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-1">
+          <CategorySidebar tree={categories} onSelect={handleSelectCategory} />
+        </div>
+        <div className="lg:col-span-3 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                value={search}
+                onChange={e=>setSearch(e.target.value)}
+                placeholder="Search components, tools, brands..."
+                className="w-full h-12 pl-4 pr-4 rounded-xl bg-black/40 border border-blue-500/30 text-white placeholder:text-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
+            <button onClick={()=>setCartOpen(true)} className="px-4 h-12 rounded-xl bg-white/10 hover:bg-white/20 text-white">View order</button>
           </div>
 
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
-          </div>
+          <ProductGrid products={products} onAddToCart={handleAddToCart} />
         </div>
-      </div>
+      </main>
+
+      <CartDrawer
+        open={cartOpen}
+        items={cart}
+        onClose={() => setCartOpen(false)}
+        onCheckout={handleCheckout}
+        onQtyChange={handleQtyChange}
+        onRemove={handleRemove}
+      />
+
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onLoginSuccess={(u)=>setUser(u)}
+      />
     </div>
   )
 }
